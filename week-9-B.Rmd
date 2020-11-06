@@ -23,6 +23,9 @@ week_9 <- kenya %>%
   droplevels() %>% 
   mutate(poverty_n = (poverty - mean(poverty))/sd(poverty)) %>% 
   select(poll_station, reg_chg, treatment, poverty_n, poverty)
+
+week_9 %>%
+  filter(poll_station == "007/001")
   
 ```
 
@@ -37,6 +40,22 @@ week_9 <- kenya %>%
 
 * Fit the  model and interpret the coefficients. Focus on the coefficient of the interaction term.
 
+$$ regchg_i = \beta_0 + \beta_1 local_{i} + \beta_2 povertyn_{i} + \beta_3 local*povertyn_{i} + \epsilon_i$$
+```{r}
+
+fit_obj <- stan_glm(formula = reg_chg ~ treatment*poverty_n,
+         data = week_9,
+         refresh = 0) %>%
+  print(digits = 6, details = FALSE)
+
+# The model applies to those eligible to vote in Kenya.
+
+# Coefficients: Small positive coefficients show a positive impact of treatment,
+# poverty_n, and the confluence of the two on change in voter registration. 
+# Last coefficient is showing how much change in registration changes with every increase in the poverty_n normalized rate for a treated locality. 
+# The Intercept's coefficient indicates how much the change in registration increases when treatment is local and poverty_n is set to 0.
+
+```
 
 
 
@@ -56,6 +75,39 @@ Write a sentence or two for each of these topics:
 
 * Answer the President's question.
 
+```{r}
+
+# The kenya data is fairly representative, since the applied population is a smaller
+# observation from this dataset. However, disregarding the differences in poverty rates
+# and other variables across the observations may render the estimate less accurate.
+
+# The ideal Preceptor Table would record the change in registration for this 
+# observation if it was both treated and not treated (control).
+
+new_obs <- tibble(treatment = "local",
+                 poverty_n = -1.608351)
+pp <- posterior_predict(fit_obj, newdata = new_obs)
+pp %>%
+  as_tibble() %>%
+  ggplot(aes(`1`)) +
+  geom_histogram(aes(y = after_stat(count/sum(count))), bins = 100, alpha = 0.5, position = "identity") +
+scale_y_continuous(labels = scales::percent_format()) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  theme_classic() +
+  labs(title = "Posterior Probability Distribution for Treatment",
+       subtitle = "Registration will not change a significant amount if treated",
+       x = "Change in Registration",
+       y = "Probability")
+
+
+tibble(reg_chg = pp) %>% 
+  mutate(reg_chg = round(reg_chg, 2)) %>%
+  mutate(ot_4 = ifelse(reg_chg == 0.04, TRUE, FALSE)) %>% 
+  summarize(perc = sum(ot_4)/n())
+# The odds of getting an increase in registration of 4% is about 6% if the polling
+# station was to be assigned the treatment.
+
+```
 
 
 
@@ -68,5 +120,24 @@ Write a sentence or two for each of these topics:
 
 Using the model which you created in Scene 1, create a graphic of the posterior probability distribution of the causal effect of `local` treatment in polling stations which have +2 sigma poverty rates. Note that there are two ways to do this. First, we can use a parameter approach. This is what we did in class last week. Second, we can use `posterior_epred()`, which is generally easier since it does the math for us. Use the `posterior_epred()` approach. 
 
+```{r}
+new_obs <- tibble(treatment = "local",
+                 poverty_n = 2)
+pe <- posterior_epred(fit_obj, newdata = new_obs)
+pe %>%
+  as_tibble() %>%
+  ggplot(aes(`1`)) +
+  geom_histogram(aes(y = after_stat(count/sum(count))), bins = 100, alpha = 0.5, position = "identity") +
+scale_y_continuous(labels = scales::percent_format()) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  theme_classic() +
+  labs(title = "Posterior Probability Distribution for Treatment",
+       x = "Change in Registration",
+       y = "Probability")
+
+posterior_interval(pe, prob = 0.95)
+# The chance in registration under treatment would fall between 5.1% to 7.2%
+# for communities with a poverty_n equal to 2.
+```
 
 
